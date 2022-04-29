@@ -1,0 +1,6 @@
+# C Stuff
+*.o
+*
+!/**/
+!*.*
+!Makefile

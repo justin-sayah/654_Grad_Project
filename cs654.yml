@@ -1,0 +1,10 @@
+name: cs654
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9.12
+  - pip=21.2.4
+  - jupyter 
+  - pip:
+    - tensorflow==2.8
+    - tf_agents==0.12.1
