@@ -23,8 +23,8 @@ _FWDT(FWDTEN_OFF);
 _FGS(GCP_OFF);   
 
 //Define global vars
-uint8_t nextTouch = Y_DIM_TOUCH;
-uint8_t dimReadLast = Y_DIM_TOUCH;
+uint8_t nextTouch = TOUCH_READ_Y;
+uint8_t dimReadLast = TOUCH_READ_Y;
 
 /*
  * Interrupt = control cycle (every 10 ms)
@@ -97,23 +97,31 @@ void __attribute__((__interrupt__)) _U2RXInterrupt(void){
     //lastPos holds the most recent position read
     //dimReadLast holds the dimension of the last read
     //nextTouch preps the next dimension to read on next interrupt
+    
     lastPos = touch_read(); 
-    if(nextTouch == X_DIM_TOUCH){
-        touch_select_dim(Y_DIM_TOUCH);
-        nextTouch = Y_DIM_TOUCH;
-        dimReadLast = X_DIM_TOUCH;
+    if(nextTouch == TOUCH_READ_X){
+        touch_select_dim(TOUCH_READ_Y);
+        nextTouch = TOUCH_READ_Y;
+        dimReadLast = TOUCH_READ_X;
     }
     else{
-        touch_select_dim(X_DIM_TOUCH);
-        nextTouch = X_DIM_TOUCH;
-        dimReadLast = Y_DIM_TOUCH;
+        touch_select_dim(TOUCH_READ_X);
+        nextTouch = TOUCH_READ_X;
+        dimReadLast = TOUCH_READ_Y;
     }
     
     //4) Set new motor duty
     motor_set_duty(incoming_dim, (uint16_t)incoming_duty);
     
+    lastPos = 1000;
+    
     //5) Send position data back to server
-    //TBD
+    uint8_t pos_low_bits = (lastPos >> 8) & 0xFF;
+    uint8_t pos_high_bits = lastPos && 0xFF;
+    
+    
+    uart2_send_8(pos_low_bits);
+    uart2_send_8(pos_high_bits);
     
 //    // wait for size of the message
 //    uint8_t message_N = 0;
