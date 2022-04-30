@@ -118,6 +118,10 @@ int main(int argc, char* argv[])
 	//high bits of duty
 	buffer[3] = min & 0xFF;        
 	
+	char read_buffer[4];
+	memset(read_buffer, 0, sizeof(read_buffer));
+	int pos_result = 0;
+	
 	while(1){
 		//min X
 		buffer[1] = 0x0;
@@ -127,6 +131,15 @@ int main(int argc, char* argv[])
 		write(ofd, &buffer[0], 4);
 		printf("Duty Sent: Min X \n");
 		sleep(3);
+		
+		read(ifd, read_buffer, 2);
+		//printf("made it here\n");
+		//while(read(ifd, &read_buffer[1],1) != 1);
+		//printf("also made it\n");
+		memcpy(&pos_result, &read_buffer[0], 2);
+		printf("Ball: %d\n", pos_result);
+		pos_result = 0;
+		memset(read_buffer, 0, sizeof(read_buffer));
 		
 		//min Y
 		buffer[1] = 0x1;
