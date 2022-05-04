@@ -1,8 +1,9 @@
-"""TODO: Description
+"""Module containing Amazing Ball System RL environment
 """
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 from time import sleep
 import csv
 from pathlib import Path
@@ -10,22 +11,22 @@ import random
 import math
 import numpy as np
 import serial
-import tensorflow as tf
 
 from tf_agents.environments import py_environment
-from tf_agents.environments import tf_environment
-from tf_agents.environments import tf_py_environment
-from tf_agents.environments import utils
 from tf_agents.specs import array_spec
-from tf_agents.environments import suite_gym
 from tf_agents.trajectories import time_step as ts
 
 SERIAL_X_DIM = 0
 SERIAL_Y_DIM = 1
 
+
 class AmazingBallSystemEnv(py_environment.PyEnvironment):
+    """Amazing Ball System RL environment
+    """
 
     def __init__(self, port='/dev/ttyUSB0', calibrate=True, seed=None):
+        """Initialize Amazing Ball System environment
+        """
         self._action_spec = array_spec.BoundedArraySpec(shape=(2, ),
                                                         dtype=np.float16,
                                                         minimum=0,
@@ -35,9 +36,11 @@ class AmazingBallSystemEnv(py_environment.PyEnvironment):
                                                              dtype=np.uint16,
                                                              name='observation')
         self._state = [0, 0]
+        self._goal = [0, 0]
 
-        self._x_range = [0, 0]
-        self._y_range = [0, 0]
+        self._board_x_range = [0, 0]
+        self._board_y_range = [0, 0]
+
         self._serial = serial.Serial(port=port)
 
         self._calibration_file_path = Path(__file__).parent.resolve() / 'calibration.csv'
@@ -45,155 +48,185 @@ class AmazingBallSystemEnv(py_environment.PyEnvironment):
             self._calibration()
         else:
             self._load_calibration()
-        print(f'ABS calibrated: x:{self._x_range} y:{self._y_range}')
 
-        self._seed = seed
-        self._goal = [0, 0]
+        print(f'ABS calibrated: x:{self._board_x_range} y:{self._board_y_range}')
+
+        if seed is not None:
+            random.seed(seed)
 
         self._reset()
 
     def _calibration(self):
-        # set ball location (bottom left)
-        self._send_comm(SERIAL_X_DIM, 0)
-        self._send_comm(SERIAL_Y_DIM, 0)
-        # wait for ball to move
-        sleep(3)
-        # measure
-        x = self._send_comm(SERIAL_X_DIM, 0)
-        y = self._send_comm(SERIAL_Y_DIM, 0)
-        self._x_range[0] = x
-        self._y_range[0] = y
+        """
+        Calibrate the Amazing Ball System board ranges.
 
-        # set ball location (top left)
-        self._send_comm(SERIAL_X_DIM, 1)
-        self._send_comm(SERIAL_Y_DIM, 0)
-        sleep(3)
-        x = self._send_comm(SERIAL_X_DIM, 1)
-        y = self._send_comm(SERIAL_Y_DIM, 0)
-        self._x_range[1] = x
-        # take more conservative estimate
-        if self._y_range[0] < y:
-            self._y_range[0] = y
+        The more conservative values for the x and y range will be used.
 
-        # set ball location (top right)
-        self._send_comm(SERIAL_X_DIM, 1)
-        self._send_comm(SERIAL_Y_DIM, 1)
-        sleep(3)
-        x = self._send_comm(SERIAL_X_DIM, 1)
-        y = self._send_comm(SERIAL_Y_DIM, 1)
-        if self._x_range[1] > x:
-            self._x_range[1] = x
-        self._y_range[1] = y
+        For example if the min x is found to be 100 and 110 at two locations,
+        the value of 110 is used.
+        """
+        min_x, min_y = self._calibrate_corner(x_duty=0, y_duty=0)
+        self._board_x_range[0] = min_x
+        self._board_y_range[0] = min_y
 
-        # set ball location (top right)
-        self._send_comm(SERIAL_X_DIM, 0)
-        self._send_comm(SERIAL_Y_DIM, 1)
-        sleep(3)
-        x = self._send_comm(SERIAL_X_DIM, 0)
-        y = self._send_comm(SERIAL_Y_DIM, 1)
-        if self._x_range[0] < x:
-            self._x_range[0] = x
-        if self._y_range[1] > y:
-            self._y_range[1] = y
+        max_x, min_y = self._calibrate_corner(x_duty=1, y_duty=0)
+        self._board_x_range[1] = max_x
+        if min_y > self._board_y_range[0]:
+            self._board_y_range[0] = min_y
 
+        max_x, max_y = self._calibrate_corner(x_duty=1, y_duty=1)
+        if max_x < self._board_x_range[1]:
+            self._board_x_range[1] = max_x
+        self._board_y_range[1] = max_y
+
+        min_x, max_y = self._calibrate_corner(x_duty=0, y_duty=1)
+        if min_x > self._board_x_range[0]:
+            self._board_x_range[0] = min_x
+        if max_y < self._board_y_range[1]:
+            self._board_y_range[1] = max_y
+
+        self._save_calibration()
+
+    def _calibrate_corner(self, x_duty, y_duty):
+        """
+        Move ball to a desired corner of the Amazing Ball System for calibration.
+
+        Args:
+            x_duty: The duty percentage of the x motor (for corners, 0 or 1).
+            y_duty: The duty percentage of the y motor (for corners, 0 or 1).
+
+        Returns:
+            The ball's position in the desired corner.
+        """
+        self._uart_comm(SERIAL_X_DIM, x_duty)
+        self._uart_comm(SERIAL_Y_DIM, y_duty)
+
+        # wait for ball to move to the corner
+        sleep(3)
+
+        # send the same command to sample the ball's position
+        ball_position_x = self._uart_comm(SERIAL_X_DIM, x_duty)
+        ball_position_y = self._uart_comm(SERIAL_Y_DIM, y_duty)
+        return ball_position_x, ball_position_y
+
+    def _save_calibration(self):
+        """
+        Save a board calibration saved in `calibration.csv`.
+        """
         header = ['x-min', 'x-max', 'y-min', 'y-max']
-        data = [self._x_range[0], self._x_range[1], self._y_range[0], self._y_range[1]]
-        with open(self._calibration_file_path, 'w', encoding='UTF8', newline='') as f:
-            writer = csv.writer(f)
+        data = [self._board_x_range[0], self._board_x_range[1],
+                self._board_y_range[0], self._board_y_range[1]]
+        with open(self._calibration_file_path, 'w', encoding='UTF8', newline='') as csv_file:
+            writer = csv.writer(csv_file)
             writer.writerow(header)
             writer.writerow(data)
 
     def _load_calibration(self):
-         with open(self._calibration_file_path, 'r', encoding='UTF8') as f:
-            reader = csv.DictReader(f)
+        """
+        Load a board calibration saved in `calibration.csv`.
+        """
+        with open(self._calibration_file_path, 'r', encoding='UTF8') as csv_file:
+            reader = csv.DictReader(csv_file)
             for row in reader:
-                self._x_range[0] = int(row['x-min'])
-                self._x_range[1] = int(row['x-max'])
-                self._y_range[0] = int(row['y-min'])
-                self._y_range[1] = int(row['y-max'])
+                self._board_x_range[0] = int(row['x-min'])
+                self._board_x_range[1] = int(row['x-max'])
+                self._board_y_range[0] = int(row['y-min'])
+                self._board_y_range[1] = int(row['y-max'])
                 break
 
-    def _random_goal(self):
-        if self._seed is not None:
-            random.seed(self._seed)
+    def _random_position(self):
+        """Generate a random position on the board.
 
-        min_x = self._x_range[0]
-        max_x = self._x_range[1]
-        min_y = self._y_range[0]
-        max_y = self._y_range[1]
-
-        self._goal = [random.randint(min_x, max_x),
-                      random.randint(min_y, max_y)]
+        Returns:
+            A random position on the board.
+        """
+        return [random.randint(self._board_x_range[0], self._board_x_range[1]),
+                random.randint(self._board_y_range[0], self._board_y_range[1])]
 
     def action_spec(self):
+        """
+        Defines the actions that should be provided to `step()`.
+
+        Returns:
+            The action specification corresponding to `action_spec()`.
+        """
         return self._action_spec
 
     def observation_spec(self):
+        """
+        Defines the observations that that are returned by `step()`.
+
+        Returns:
+            The observation specification corresponding to `observation_spec()`.
+        """
         return self._observation_spec
 
     def _reset(self):
-        self._state = [0, 0]
-        self._random_goal()
-        self._send_comm(SERIAL_X_DIM, 0)
-        self._send_comm(SERIAL_Y_DIM, 0)
+        """
+        Start a new RL sequence.
+
+            Returns:
+                The initial TimeStep of the environment.
+        """
+        # The default location of the ball on the board is (min x, min y)
+        self._state = [self._board_x_range[0], self._board_y_range[0]]
+        self._uart_comm(SERIAL_X_DIM, 0)
+        self._uart_comm(SERIAL_Y_DIM, 0)
+        # wait for ball to reach default location
         sleep(3)
+        # A new random goal is created
+        self._goal = self._random_position()
         return ts.restart(np.array([self._state], dtype=np.float16))
 
     def _step(self, action):
-        # send action to ABS and wait for reponse
-        x = self._send_comm(SERIAL_X_DIM, action[0])
-        y = self._send_comm(SERIAL_Y_DIM, action[1])
+        """
+        Update the environment according to an action.
 
-        if x < self._x_range[0]:
-            x = self._x_range[0]
-        elif x > self._x_range[1]:
-            x = self._x_range[1]
+        Args:
+            action: The action to take corresponding to `action_spec()`.
 
-        if y < self._y_range[0]:
-            y = self._y_range[0]
-        elif y > self._y_range[1]:
-            y = self._y_range[1]
+        Returns:
+            The next TimeStep of the environment.
+        """
+        motor_x_command = action[0]
+        motor_y_command = action[1]
 
-        reward = -math.dist([x, y], self._goal)
+        ball_position_x = self._uart_comm(SERIAL_X_DIM, motor_x_command)
+        ball_position_y = self._uart_comm(SERIAL_Y_DIM, motor_y_command)
+
+        # keep ball position in range of board
+        ball_position_x = max(
+            min(self._board_x_range[1], ball_position_x), self._board_x_range[0])
+        ball_position_y = max(
+            min(self._board_y_range[1], ball_position_y), self._board_y_range[0])
+
+        reward = -math.dist([ball_position_x, ball_position_y], self._goal)
 
         return ts.transition(np.array([self._state], dtype=np.uint16), reward)
 
-    def _send_comm(self, dimension, duty_percent):
+    def _uart_comm(self, dimension, duty_percent):
+        """
+        Send command to Amazing Ball System Motor over UART.
+
+        Args:
+            dimension: The motor dimension (SERIAL_X_DIM, or SERIAL_X_DIM).
+            duty_percent: The motor duty cycle as a percentage.
+
+        Returns:
+            The position of the ball in the `dimension` dimension.
+        """
+        # give touchscreen time to switch sample direction
         sleep(0.011)
+
         duty = (int)(900 + (duty_percent * 1200))
-        lowBitsSend, highBitsSend = (duty & 0xFFFFFFFF).to_bytes(2, 'big')
-        testSend = [0, dimension, lowBitsSend, highBitsSend]
-        byteSend = bytearray(testSend)
-        self._serial.write(byteSend)
-        lowByteRead = self._serial.read()
-        highByteRead = self._serial.read()
-        allBytes = lowByteRead + highByteRead
-        dimensionRead = int.from_bytes(allBytes, 'big')
-        return np.uint16(dimensionRead)
+        duty_low_bits, duty_high_bits = (duty & 0xFFFFFFFF).to_bytes(2, 'big')
+        message = [0, dimension, duty_low_bits, duty_high_bits]
+        message_bytes = bytearray(message)
+        self._serial.write(message_bytes)
 
+        response_low_bytes = self._serial.read()
+        response_high_bytes = self._serial.read()
+        response_bytes = response_low_bytes + response_high_bytes
+        response = int.from_bytes(response_bytes, 'big')
 
-# TEST 1:
-env_timelimit = wrappers.TimeLimit(env=env, duration=100)
-# num_episodes = 3
-
-# rewards = []
-# steps = []
-
-# for _ in range(num_episodes):
-#     time_step = env_timelimit.reset()
-#     episode_reward = 0
-#     episode_steps = 0
-#     while not time_step.is_last():
-#         action = np.random.random((2, 1))
-#         time_step = env_timelimit.step(action)
-#         episode_steps += 1
-#         episode_reward += time_step.reward
-#     rewards.append(episode_reward)
-#     steps.append(episode_steps)
-
-# num_steps = np.sum(steps)
-# avg_length = np.mean(steps)
-# avg_reward = np.mean(rewards)
-
-# print('num_episodes:', num_episodes, 'num_steps:', num_steps)
-# print('avg_length', avg_length, 'avg_reward:', avg_reward)
+        return np.uint16(response)
