@@ -1,4 +1,4 @@
-"""Module containing Amazing Ball System RL environment
+"""Module containing Amazing Ball System RL environment.
 """
 from __future__ import absolute_import
 from __future__ import division
