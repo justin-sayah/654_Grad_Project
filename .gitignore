@@ -1,9 +1,12 @@
-# C Stuff
+# C stuff
 *.o
 *
 !/**/
 !*.*
 !Makefile
 
-# Visual Studio Code
+# VS Code stuff
 .vscode
+
+# Python stuff
+__pycache__/

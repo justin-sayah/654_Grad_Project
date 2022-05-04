@@ -5,7 +5,7 @@ from environment import AmazingBallSystemEnv
 from tf_agents.environments import wrappers
 import numpy as np
 
-PORT = '/dev/cu.usbserial-1410'
+PORT = '/dev/cu.usbserial-1420'
 CALIBRATE = True
 
 def main():
