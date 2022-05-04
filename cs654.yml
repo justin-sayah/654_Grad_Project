@@ -2,9 +2,12 @@ name: cs654
 channels:
   - conda-forge
 dependencies:
+  - autopep8=1.6.0 
+  - jupyterlab=3.3.4
   - python=3.9.12
   - pip=21.2.4
-  - jupyter 
+  - pylint=2.12.2
+  - pyserial=3.5
   - pip:
     - tensorflow==2.8
     - tf_agents==0.12.1
