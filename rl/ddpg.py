@@ -121,6 +121,8 @@ def train(env,
 
             action = tf.squeeze(actor(prev_state)).numpy() + ou_noise()
             action = np.clip(action, lower_bound, upper_bound)
+            if not isinstance(action, np.ndarray):
+                action = np.array([action])
 
             state, reward, done, info = env.step(action)
             episodic_reward += reward
@@ -202,6 +204,8 @@ def test(env,
 
             action = tf.squeeze(actor(prev_state)).numpy()
             action = np.clip(action, lower_bound, upper_bound)
+            if not isinstance(action, np.ndarray):
+                action = np.array([action])
 
             state, reward, done, info = env.step(action)
             episodic_reward += reward
