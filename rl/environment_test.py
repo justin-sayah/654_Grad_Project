@@ -1,46 +1,30 @@
 """
-Module containing Amazing Ball System RL environment tests.
+Module containing tests for the AmazingBallSystemEnv environment.
 """
 from environment import AmazingBallSystemEnv
-from tf_agents.environments import wrappers
-import numpy as np
 
 PORT = '/dev/cu.usbserial-1420'
 CALIBRATE = True
+DURATION = 100
 
 def main():
     """
     Tests
     """
-    environment = AmazingBallSystemEnv(port=PORT, calibrate=CALIBRATE, seed=None)
+    env = AmazingBallSystemEnv(port=PORT, calibrate=CALIBRATE, duration=DURATION)
+    env.reset()
+    while True:
+        # Take a random action
+        action = env.action_space.sample()
+        _, _, done, _ = env.step(action)
 
-    duration = 100 # TimeSteps
-    environment_timelimit = wrappers.TimeLimit(env=environment, duration=duration)
+        # Render the game
+        # env.render()
 
-    num_episodes = 3
+        if done is True:
+            break
 
-    rewards = []
-    steps = []
-
-    # randomly select actions for episode durations
-    for _ in range(num_episodes):
-        time_step = environment_timelimit.reset()
-        episode_reward = 0
-        episode_steps = 0
-        while not time_step.is_last():
-            action = np.random.random((2, 1))
-            time_step = environment_timelimit.step(action)
-            episode_steps += 1
-            episode_reward += time_step.reward
-        rewards.append(episode_reward)
-        steps.append(episode_steps)
-
-    num_steps = np.sum(steps)
-    avg_length = np.mean(steps)
-    avg_reward = np.mean(rewards)
-
-    print('num_episodes:', num_episodes, 'num_steps:', num_steps)
-    print('avg_length', avg_length, 'avg_reward:', avg_reward)
+    env.close()
 
 if __name__ == '__main__':
     main()
