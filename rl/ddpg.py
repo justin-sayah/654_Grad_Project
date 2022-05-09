@@ -112,9 +112,9 @@ def train(env,
 
     for episode in range(episodes):
         # UNCOMMENT LINE FOR ABS ENVIRONMENT
-        # prev_state, _, _, _ = env.reset()
+        prev_state, _, _, _ = env.reset()
         # UNCOMMENT LINE FOR GYM ENVIRONMENTS
-        prev_state = env.reset()
+        # prev_state = env.reset()
         episodic_reward = 0
         while True:
             if render:
@@ -199,7 +199,10 @@ def test(env,
     avg_reward_list = []
 
     for episode in range(episodes):
-        prev_state = env.reset()
+        # UNCOMMENT LINE FOR ABS ENVIRONMENT
+        prev_state, _, _, _ = env.reset()
+        # UNCOMMENT LINE FOR GYM ENVIRONMENTS
+        # prev_state = env.reset()
         episodic_reward = 0
         while True:
             if render:

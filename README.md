@@ -49,5 +49,5 @@ Fix:
     ```
 3. Add to path:
     ```
-    export LD_LIBRARY=$LD_LIBRARY_PATH:~/anaconda3/lib
+    echo 'export LD_LIBRARY=$LD_LIBRARY_PATH:~/anaconda3/lib' >> ~/.bashrc
     ```
