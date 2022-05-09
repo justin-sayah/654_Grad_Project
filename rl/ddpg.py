@@ -111,6 +111,9 @@ def train(env,
     avg_reward_list = []
 
     for episode in range(episodes):
+        # UNCOMMENT LINE FOR ABS ENVIRONMENT
+        # prev_state, _, _, _ = env.reset()
+        # UNCOMMENT LINE FOR GYM ENVIRONMENTS
         prev_state = env.reset()
         episodic_reward = 0
         while True:
@@ -120,11 +123,13 @@ def train(env,
             prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
             action = tf.squeeze(actor(prev_state)).numpy() + ou_noise()
-            action = np.clip(action, lower_bound, upper_bound)
+            action = (((action + 1) * (upper_bound - lower_bound)) / 2) + lower_bound
+            # action = np.clip(action, lower_bound, upper_bound)
             if not isinstance(action, np.ndarray):
                 action = np.array([action])
 
             state, reward, done, info = env.step(action)
+            
             episodic_reward += reward
 
             replay_buffer.record((prev_state, action, reward, state))

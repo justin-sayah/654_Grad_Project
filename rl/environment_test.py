@@ -3,8 +3,8 @@ Module containing tests for the AmazingBallSystemEnv environment.
 """
 from environment import AmazingBallSystemEnv
 
-PORT = '/dev/cu.usbserial-1420'
-CALIBRATE = True
+PORT = '/dev/cu.usbserial-1410'
+CALIBRATE = False
 DURATION = 100
 
 def main():
@@ -16,7 +16,9 @@ def main():
     while True:
         # Take a random action
         action = env.action_space.sample()
-        _, _, done, _ = env.step(action)
+        action = [0, 0]
+        state, _, done, _ = env.step(action)
+        print(state)
 
         # Render the game
         # env.render()

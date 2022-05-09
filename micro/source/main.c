@@ -12,6 +12,7 @@
 #include "timer.h"
 #include "touch.h"
 #include "motor.h"
+#include "sort.h"
 
 // Primary (XT, HS, EC) Oscillator without PLL
 _FOSCSEL(FNOSC_PRIPLL);
@@ -36,121 +37,100 @@ uint8_t dimReadLast = TOUCH_READ_Y;
  * 2nd data byte: high bytes for dimension duty (us)
  * stop word (unnecessary?): 1 for stop
  * 
- * 1) Read data waiting in buffer
+ * 1) Read message (motor command)
  * 
- * 2) Poll ball position
+ * 2) Perform motor command
  * 
- * 3) Change touch board dimension
+ * 3) Sample ball position
  * 
- * 4) Set new motor duty
+ * 4) Change touch board dimension
  * 
- * 5) Send position data back to server
+ * 5) Send message (ball position)
  * 
  */
 void __attribute__((__interrupt__)) _U2RXInterrupt(void){
-    //lcd_locate(0,1);
-    //lcd_printf("interrupt triggered")
-    
-    lcd_clear();
-    lcd_locate(0, 0);
-    lcd_printf("-- Grad Project --");
-    
-    //1) Read data waiting in buffer
-    uint8_t data = 0;
-    
-    //wait for start bit
+    ///////////////////////////
+    ///// 1. Read message /////
+    ///////////////////////////
+
+    // Read start bit
+    uint8_t startBit = 0;
     while(U2STAbits.URXDA == 0);
-    uart2_recv(&data);
+    uart2_recv(&startBit);
     
-    // wait for dimension, receive it
-    //x = 0x0, y = 0x1
-    uint8_t incoming_dim = 0;  
+    // Read dimension (x = 0x0, y = 0x1)
+    uint8_t dimension = 0;  
     while(U2STAbits.URXDA == 0);
-    uart2_recv(&data);
-    incoming_dim = data;
+    uart2_recv(&dimension);
     
     lcd_locate(0, 1);
-    lcd_printf("Dimension: %d", incoming_dim);
+    lcd_printf("Dimension: %d", dimension);
         
-    //wait for low bits of motor duty in microseconds
-    uint8_t motor_low = 0;
+    // Read motor duty (microseconds)
+    uint8_t dutyLowBits = 0;
     while(U2STAbits.URXDA == 0);
-    uart2_recv(&data);
-    motor_low = data;
+    uart2_recv(&dutyLowBits);
     
-    //wait for high bits of motor duty in microseconds
-    uint8_t motor_high = 0;
+    uint8_t dutyHighBits = 0;
     while(U2STAbits.URXDA == 0);
-    uart2_recv(&data);
-    motor_high = data;
+    uart2_recv(&dutyHighBits);
         
-    uint16_t incoming_duty = (motor_low << 8) | motor_high;
+    uint16_t duty = (dutyLowBits << 8) | dutyHighBits;
         
     lcd_locate(0, 2);
-    lcd_printf("Duty Rec: %d", incoming_duty)
+    lcd_printf("Duty: %d", duty);
     
-    //TEMP FOR DRIVER
-    //uart2_send_8(MSG_ACK);
+    ////////////////////////////////////
+    ///// 2. Perform motor command /////
+    ////////////////////////////////////
+
+    motor_set_duty(dimension, (uint16_t)duty);
+
+    ///////////////////////////////////
+    ///// 3. Sample ball position /////
+    ///////////////////////////////////
+
+    // Sample numPositionsSampled raw positions
+    uint8_t numPositionsSampled = 5;
+    uint16_t positions[numPositionsSampled];
+    uint8_t i;
+    for (i = 0; i < numPositionsSampled; i++)
+    {
+        positions[i] = touch_read();
+    }
+
+    // Sort raw positions
+    selection_sort(&positions, numPositionsSampled);
+
+    // Use median of raw positions as position value
+    uint16_t position = positions[numPositionsSampled / 2];
+
+    ///////////////////////////////////////////
+    ///// 4. Change touch board dimension /////
+    ///////////////////////////////////////////
     
-    // 2) Poll ball position, 3) Change Dimension
-    uint16_t lastPos = 0;
-    //lastPos holds the most recent position read
-    //dimReadLast holds the dimension of the last read
-    //nextTouch preps the next dimension to read on next interrupt
-    
-    lastPos = touch_read(); 
-    if(nextTouch == TOUCH_READ_X){
+    if(nextTouch == TOUCH_READ_X)
+    {
         touch_select_dim(TOUCH_READ_Y);
         nextTouch = TOUCH_READ_Y;
         dimReadLast = TOUCH_READ_X;
     }
-    else{
+    else
+    {
         touch_select_dim(TOUCH_READ_X);
         nextTouch = TOUCH_READ_X;
         dimReadLast = TOUCH_READ_Y;
     }
+
+    ///////////////////////////
+    ///// 5. Send message /////
+    ///////////////////////////
+
+    uint8_t positionLowBits = (position >> 8) & 0xFF;
+    uint8_t positionHighBits = position && 0xFF;
     
-    //4) Set new motor duty
-    motor_set_duty(incoming_dim, (uint16_t)incoming_duty);
-    
-    lastPos = 1000;
-    
-    //5) Send position data back to server
-    uint8_t pos_low_bits = (lastPos >> 8) & 0xFF;
-    uint8_t pos_high_bits = lastPos && 0xFF;
-    
-    
-    uart2_send_8(pos_low_bits);
-    uart2_send_8(pos_high_bits);
-    
-//    // wait for size of the message
-//    uint8_t message_N = 0;
-//    while(U2STAbits.URXDA == 0);
-//    uart2_recv(&data);
-//    message_N = data;
-//    if (message_N >= MSG_BYTES_MSG)
-//    {
-//        uart2_send_8(MSG_NACK);
-//    }
-        
-//    //wait for body of the message
-//    uint16_t crc = 0;
-//    uint8_t i;
-//    for (i = 0; i < message_N; i++)
-//    {
-//        while(U2STAbits.URXDA == 0);
-//        uart2_recv(&data);
-//        crc = crc_update(crc, data);
-//        lcd_locate(i, 3);
-//        lcd_printf("%c", data);
-//    }
-//     
-//    // if crc is the same, send ACK
-//        
-//    if (message_crc == crc)
-//    {
-//        uart2_send_8(MSG_ACK);
-//    }
+    uart2_send_8(positionLowBits);
+    uart2_send_8(positionLowBits);
     
     U2RXREG = 0;
     CLEARBIT(IFS1bits.U2RXIF);

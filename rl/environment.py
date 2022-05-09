@@ -65,7 +65,12 @@ class AmazingBallSystemEnv(gym.Env):
         self.duration = duration
         self.steps = 0
         self.done = False
-        self.goal = [0, 0]
+        self.goal = [(self.x_min + self.x_max) / 2, (self.y_min + self.y_max) / 2]
+
+        self.distance_max = math.dist([self.x_min, self.y_min], self.goal)
+        self.distance_max = max(self.distance_max, math.dist([self.x_min, self.y_max], self.goal))
+        self.distance_max = max(self.distance_max, math.dist([self.x_max, self.y_max], self.goal))
+        self.distance_max = max(self.distance_max, math.dist([self.x_max, self.y_min], self.goal))
 
         print(f'ABS calibrated: x:[{self.x_min},  {self.x_max}], y:[{self.y_min}, {self.y_max}]')
 
@@ -155,6 +160,12 @@ class AmazingBallSystemEnv(gym.Env):
         return [random.randint(self.x_min, self.x_max),
                 random.randint(self.y_min, self.y_max)]
 
+    def _reward(self, ball_position):
+        distance = math.dist(ball_position, self.goal)
+        distance_normalized = distance / self.distance_max
+        reward = - distance_normalized
+        return reward
+
     def _uart_comm(self, dimension, duty_percent):
         """
         Send command to Amazing Ball System Motor over UART.
@@ -167,7 +178,7 @@ class AmazingBallSystemEnv(gym.Env):
             The position of the ball in the `dimension` dimension.
         """
         # give touchscreen time to switch sample direction
-        sleep(0.011)
+        sleep(0.01)
 
         duty = (int)(900 + (duty_percent * 1200))
         duty_low_bits, duty_high_bits = (duty & 0xFFFFFFFF).to_bytes(2, 'big')
@@ -193,15 +204,12 @@ class AmazingBallSystemEnv(gym.Env):
 
         self.done = False
 
-        # The default location of the ball on the board is (min x, min y)
-        self._uart_comm(SERIAL_X_DIM, 0)
-        self._uart_comm(SERIAL_Y_DIM, 0)
+        # The default location of the ball on the board is (mid x, mid y)
+        # self._uart_comm(SERIAL_X_DIM, 0.5)
+        # self._uart_comm(SERIAL_Y_DIM, 0.5)
 
         # Wait for ball to reach default location
-        sleep(3)
-
-        # Create new random goal
-        self.goal = self._random_position()
+        # sleep(1.5)
 
         self.steps = 0
 
@@ -232,6 +240,6 @@ class AmazingBallSystemEnv(gym.Env):
         ball_position_x = max(min(self.x_max, ball_position_x), self.x_min)
         ball_position_y = max(min(self.y_max, ball_position_y), self.y_min)
 
-        reward = -math.dist([ball_position_x, ball_position_y], self.goal)
+        reward = self._reward([ball_position_x, ball_position_y])
 
         return state, reward, self.done, []

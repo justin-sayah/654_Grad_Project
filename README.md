@@ -18,7 +18,7 @@ DDPG code adapted from [here](https://keras.io/examples/rl/ddpg_pendulum/#introd
 
 4. Test with:
     ```
-    python example_pendulum_train.py
+    python rl/example_pendulum_train.py
     ```
 
 **After Setup**:

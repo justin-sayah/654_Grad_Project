@@ -22,7 +22,7 @@ def get_actor(num_states, num_actions, lower_bound, upper_bound):
     inputs = tf.keras.layers.Input(shape=(num_states,))
     out = tf.keras.layers.Dense(256, activation="relu")(inputs)
     out = tf.keras.layers.Dense(256, activation="relu")(out)
-    outputs = tf.keras.layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
+    outputs = tf.keras.layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init, use_bias=False, activity_regularizer=tf.keras.regularizers.L2(1e-5))(out)
 
     # outputs: old range (-1, 1) -> new range (lower_bound, upper_bound)
     # https://math.stackexchange.com/questions/1205733/how-to-convert-or-transform-from-one-range-to-another
@@ -55,8 +55,8 @@ def get_critic(num_states, num_actions):
     # Both are passed through seperate layer before concatenating
     concat = tf.keras.layers.Concatenate()([state_out, action_out])
 
-    out = tf.keras.layers.Dense(256, activation="relu")(concat)
-    out = tf.keras.layers.Dense(256, activation="relu")(out)
+    out = tf.keras.layers.Dense(512, activation="relu")(concat)
+    out = tf.keras.layers.Dense(512, activation="relu")(out)
     outputs = tf.keras.layers.Dense(1)(out)
 
     # Outputs single value for give state-action
